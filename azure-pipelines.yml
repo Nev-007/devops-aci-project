@@ -1,0 +1,51 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageName: 'devops-aci-demo'
+  acrName: 'devopsacrdemo123'
+  acrLoginServer: 'devopsacrdemo123.azurecr.io'
+
+stages:
+
+- stage: Build
+  displayName: Build and Push Image
+  jobs:
+  - job: Build
+    steps:
+
+    - task: Docker@2
+      displayName: Build and Push Image
+      inputs:
+        containerRegistry: 'ACR-Service-Connection'
+        repository: $(imageName)
+        command: buildAndPush
+        Dockerfile: '**/Dockerfile'
+        tags: |
+          latest
+
+- stage: Deploy
+  displayName: Deploy to Azure Container Instance
+  jobs:
+  - job: DeployACI
+    steps:
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'Azure-Service-Connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+
+          az container create \
+          --resource-group devops-rg \
+          --name devops-aci-container \
+          --image $(acrLoginServer)/$(imageName):latest \
+          --registry-login-server $(acrLoginServer) \
+          --registry-username $(acrName) \
+          --registry-password $(az acr credential show --name $(acrName) --query passwords[0].value -o tsv) \
+          --dns-name-label devops-aci-demo123 \
+          --ports 3000
